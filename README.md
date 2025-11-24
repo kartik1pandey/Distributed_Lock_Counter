@@ -85,15 +85,7 @@ Group_XX_DistributedCounter/
 ├── requirements.txt    # Python dependencies
 ├── README.md          # This file
 ├── demo_video.mp4     # 5-minute demonstration video
-└── group_details.txt  # Group member information
 ```
-
-## 🎥 Demo Video Contents
-1. **Introduction (0:00-0:20)**: Team introduction and project name
-2. **System Overview (0:20-1:20)**: What the counter system does
-3. **Architecture (1:20-2:20)**: Diagram explanation
-4. **Live Demo (2:20-4:20)**: Running both tests showing the difference
-5. **Takeaway (4:20-5:00)**: Key learning about concurrency control
 
 ## 🛠️ Technical Details
 
