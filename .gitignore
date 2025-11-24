@@ -1,0 +1,17 @@
+# Python venv
+venv/
+.env/
+*.pyc
+__pycache__/
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# __pycache__ backup
+*/__pycache__/

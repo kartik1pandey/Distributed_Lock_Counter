@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Counter Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .card h2 {
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .counter-value {
+            font-size: 4em;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .unsafe .counter-value {
+            color: #e74c3c;
+        }
+        .safe .counter-value {
+            color: #27ae60;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        .btn-unsafe {
+            background: #e74c3c;
+            color: white;
+        }
+        .btn-unsafe:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+        .btn-safe {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-safe:hover {
+            background: #229954;
+            transform: translateY(-2px);
+        }
+        .btn-reset {
+            background: #3498db;
+            color: white;
+        }
+        .btn-reset:hover {
+            background: #2980b9;
+        }
+        .btn-auto {
+            background: #9b59b6;
+            color: white;
+        }
+        .btn-auto:hover {
+            background: #8e44ad;
+        }
+        .status {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+        .log {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .log-entry {
+            padding: 8px;
+            border-left: 3px solid #3498db;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .log-entry.error {
+            border-left-color: #e74c3c;
+            background: #ffebee;
+        }
+        .log-entry.success {
+            border-left-color: #27ae60;
+            background: #e8f5e9;
+        }
+        .icon {
+            font-size: 1.2em;
+        }
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔢 Distributed Counter Dashboard</h1>
+            <p>Live demonstration of concurrency control and the lost update problem</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="card unsafe">
+                <h2><span class="icon">⚠️</span> Unsafe Counter (No Lock)</h2>
+                <div class="counter-value" id="unsafeCounter">0</div>
+                <button class="btn btn-unsafe" onclick="incrementUnsafe()">Increment (Unsafe)</button>
+                <button class="btn btn-auto" onclick="autoTestUnsafe()">Auto Test (100x)</button>
+                <div class="status">
+                    <strong>Status:</strong> <span id="unsafeStatus">Ready</span>
+                </div>
+            </div>
+
+            <div class="card safe">
+                <h2><span class="icon">✅</span> Safe Counter (With Lock)</h2>
+                <div class="counter-value" id="safeCounter">0</div>
+                <button class="btn btn-safe" onclick="incrementSafe()">Increment (Safe)</button>
+                <button class="btn btn-auto" onclick="autoTestSafe()">Auto Test (100x)</button>
+                <div class="status">
+                    <strong>Status:</strong> <span id="safeStatus">Ready</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <button class="btn btn-reset" onclick="resetCounters()">🔄 Reset Both Counters</button>
+        </div>
+
+        <div class="log">
+            <h3>📋 Activity Log</h3>
+            <div id="logContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:5000';
+        let autoTestRunning = false;
+
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.insertBefore(entry, logContainer.firstChild);
+            
+            // Keep only last 50 entries
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch(`${BASE_URL}/status`);
+                const data = await response.json();
+                document.getElementById('unsafeCounter').textContent = data.unsafe_counter;
+                document.getElementById('safeCounter').textContent = data.safe_counter;
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+
+        async function incrementUnsafe() {
+            try {
+                document.getElementById('unsafeStatus').textContent = 'Processing...';
+                const response = await fetch(`${BASE_URL}/increment`, { method: 'POST' });
+                const data = await response.json();
+                await updateStatus();
+                document.getElementById('unsafeStatus').textContent = 'Ready';
+                addLog(`Unsafe increment: ${data.counter}`, 'info');
+            } catch (error) {
+                addLog(`Error: ${error.message}`, 'error');
+                document.getElementById('unsafeStatus').textContent = 'Error';
+            }
+        }
+
+        async function incrementSafe() {
+            try {
+                document.getElementById('safeStatus').textContent = 'Processing...';
+                const response = await fetch(`${BASE_URL}/increment-safe`, { method: 'POST' });
+                const data = await response.json();
+                await updateStatus();
+                document.getElementById('safeStatus').textContent = 'Ready';
+                addLog(`Safe increment: ${data.counter}`, 'success');
+            } catch (error) {
+                addLog(`Error: ${error.message}`, 'error');
+                document.getElementById('safeStatus').textContent = 'Error';
+            }
+        }
+
+        async function resetCounters() {
+            try {
+                const response = await fetch(`${BASE_URL}/reset`, { method: 'POST' });
+                await response.json();
+                await updateStatus();
+                addLog('Counters reset to 0', 'info');
+            } catch (error) {
+                addLog(`Error resetting: ${error.message}`, 'error');
+            }
+        }
+
+        async function autoTestUnsafe() {
+            if (autoTestRunning) return;
+            autoTestRunning = true;
+            
+            document.getElementById('unsafeStatus').textContent = 'Running auto test...';
+            addLog('Starting auto test (100 concurrent requests - UNSAFE)', 'info');
+            
+            const startValue = parseInt(document.getElementById('unsafeCounter').textContent);
+            const promises = [];
+            
+            for (let i = 0; i < 100; i++) {
+                promises.push(fetch(`${BASE_URL}/increment`, { method: 'POST' }));
+            }
+            
+            await Promise.all(promises);
+            await updateStatus();
+            
+            const endValue = parseInt(document.getElementById('unsafeCounter').textContent);
+            const lost = startValue + 100 - endValue;
+            
+            document.getElementById('unsafeStatus').textContent = 'Test complete';
+            addLog(`Auto test complete. Expected: ${startValue + 100}, Got: ${endValue}, Lost: ${lost}`, lost > 0 ? 'error' : 'success');
+            
+            autoTestRunning = false;
+        }
+
+        async function autoTestSafe() {
+            if (autoTestRunning) return;
+            autoTestRunning = true;
+            
+            document.getElementById('safeStatus').textContent = 'Running auto test...';
+            addLog('Starting auto test (100 concurrent requests - SAFE)', 'info');
+            
+            const startValue = parseInt(document.getElementById('safeCounter').textContent);
+            const promises = [];
+            
+            for (let i = 0; i < 100; i++) {
+                promises.push(fetch(`${BASE_URL}/increment-safe`, { method: 'POST' }));
+            }
+            
+            await Promise.all(promises);
+            await updateStatus();
+            
+            const endValue = parseInt(document.getElementById('safeCounter').textContent);
+            
+            document.getElementById('safeStatus').textContent = 'Test complete';
+            addLog(`Auto test complete. Expected: ${startValue + 100}, Got: ${endValue}`, 'success');
+            
+            autoTestRunning = false;
+        }
+
+        // Initial status update
+        updateStatus();
+        addLog('Dashboard loaded. Server: ' + BASE_URL, 'success');
+        
+        // Auto-refresh status every 2 seconds
+        setInterval(updateStatus, 2000);
+    </script>
+</body>
+</html>
